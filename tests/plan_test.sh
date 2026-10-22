@@ -40,19 +40,19 @@ want() { # want <what> <output> <expected line>
 
 c=$(describe "")
 out=$(plan "$c")
-want "no description: the submodule's release" "$out" "builds=[{\"duckdb\":\"v2.0.0\",\"commit\":\"$c\"}]"
+want "no description: the submodule's release" "$out" "builds=[{\"duckdb\":\"v2.0.0\",\"ref\":\"v2.0.0\",\"duckdb_commit\":\"$v200\",\"commit\":\"$c\"}]"
 want "no description: every platform but WebAssembly" "$out" "exclude=wasm_mvp;wasm_eh;wasm_threads"
 want "no description: the opt-in platforms" "$out" "opt_in=linux_amd64_musl;linux_arm64_musl;osx_amd64;windows_arm64"
 
 c=$(describe $'extension:\n  name: my_ext\n  excluded_platforms: "windows_arm64;linux_amd64_musl"\n  duckdb_versions: "v2.0.0; v1.4.0"')
 out=$(plan "$c")
-want "tags: those Enterest builds for" "$out" "builds=[{\"duckdb\":\"v2.0.0\",\"commit\":\"$c\"}]"
+want "tags: those Enterest builds for" "$out" "builds=[{\"duckdb\":\"v2.0.0\",\"ref\":\"v2.0.0\",\"duckdb_commit\":\"$v200\",\"commit\":\"$c\"}]"
 want "excluded platforms" "$out" "exclude=windows_arm64;linux_amd64_musl;wasm_mvp;wasm_eh;wasm_threads"
 want "excluded opt-in platforms" "$out" "opt_in=linux_arm64_musl;osx_amd64"
 
 c=$(describe "$(printf 'extension:\n  duckdb_versions:\n    v2.0.0: %s\n' "$other")")
 out=$(plan "$c")
-want "a commit per DuckDB version" "$out" "builds=[{\"duckdb\":\"v2.0.0\",\"commit\":\"$other\"}]"
+want "a commit per DuckDB version" "$out" "builds=[{\"duckdb\":\"v2.0.0\",\"ref\":\"v2.0.0\",\"duckdb_commit\":\"$v200\",\"commit\":\"$other\"}]"
 
 c=$(describe $'extension:\n  duckdb_versions:\n    v2.0.0: abc')
 want "a short commit" "$(plan "$c")" "error: plan: duckdb_versions v2.0.0: a full commit hash, or \"\""
@@ -62,7 +62,7 @@ c=$(describe $'extension:\n  excluded_platforms: "x\\"$(id)\\""')
 want "excluded platforms: names only" "$(plan "$c")" "error: plan: excluded_platforms: platform names ([a-z0-9_]), ;-separated"
 c=$(describe $'extension:\n  excluded_platforms: "osx_amd64,windows_arm64"\n  duckdb_versions: "v2.0.0,v2.0.0"')
 out=$(plan "$c")
-want "a comma, and a version twice" "$out" "builds=[{\"duckdb\":\"v2.0.0\",\"commit\":\"$c\"}]"
+want "a comma, and a version twice" "$out" "builds=[{\"duckdb\":\"v2.0.0\",\"ref\":\"v2.0.0\",\"duckdb_commit\":\"$v200\",\"commit\":\"$c\"}]"
 want "a comma between platforms" "$out" "exclude=osx_amd64;windows_arm64;wasm_mvp;wasm_eh;wasm_threads"
 c=$(describe $'extension:\n  excluded_platforms:\n    - "wasm_mvp"\n    - "osx_amd64"')
 want "excluded platforms as a list (tresor's)" "$(plan "$c")" "exclude=wasm_mvp;osx_amd64;wasm_mvp;wasm_eh;wasm_threads"
@@ -73,6 +73,29 @@ want "keys: a key left open" "$(plan "$c" $'-----BEGIN PUBLIC KEY-----\nAAAA\n$(
 key=$'-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----\n'
 want "keys: five" "$(plan "$c" "$key$key$key$key$key")" "error: plan: license_keys: PEM public keys only, at most four"
 want "a commit not in the repository" "$(plan "$(printf 'e%.0s' {1..40})")" "error: plan: the commit $(printf 'e%.0s' {1..40}) is not in https://git.example/dev/ext"
+
+# a development build of DuckDB (Enterest's spec 0003, part 3b-3): named by its source id, built at
+# its commit
+dev=0123456789abcdef0123456789abcdef01234567
+versions=$work/duckdb-versions
+{ cat "$here/duckdb-versions"; echo "${dev:0:10} $dev dev"; } >"$versions"
+export DUCKDB_VERSIONS_FILE=$versions
+c=$(describe $'extension:\n  duckdb_versions: "v2.0.0;0123456789"')
+want "a development build named" "$(plan "$c")" \
+	"builds=[{\"duckdb\":\"v2.0.0\",\"ref\":\"v2.0.0\",\"duckdb_commit\":\"$v200\",\"commit\":\"$c\"},{\"duckdb\":\"0123456789\",\"ref\":\"$dev\",\"duckdb_commit\":\"$dev\",\"commit\":\"$c\"}]"
+git -C "$repo" update-index --cacheinfo "160000,$dev,duckdb"
+c=$(describe $'extension:\n  name: my_ext')
+want "the submodule at a development build" "$(plan "$c")" "builds=[{\"duckdb\":\"0123456789\",\"ref\":\"$dev\",\"duckdb_commit\":\"$dev\",\"commit\":\"$c\"}]"
+for line in "${dev:0:9}x $dev dev" "v2.1.0" "v2.1.0 $dev nightly" "x;id $dev" "v2.1.0 abc" "--upload-pack=x $dev" \
+	"v2.0.0 $dev" "v2.1.0 $(awk '$1 == "v2.0.0" {print $2}' "$here/duckdb-versions")"; do
+	{ cat "$here/duckdb-versions"; echo "$line"; } >"$versions"
+	want "duckdb-versions: $line" "$(plan "$c")" "error: plan: duckdb-versions: a line is <tag> <commit>, or <source id> <commit> dev"
+done
+unset DUCKDB_VERSIONS_FILE
+c=$(describe $'extension:\n  duckdb_versions: "0123456789"')
+want "a development build Enterest does not list" "$(plan "$c")" "error: plan: none of the DuckDB versions 0123456789 is one Enterest builds for: v2.0.0"
+c=$(describe $'extension:\n  duckdb_versions: 1234567890')
+want "a source id unquoted" "$(plan "$c")" "error: plan: duckdb_versions: names (a source id quoted, as YAML reads digits as a number), or a map of a name to a commit"
 
 # inputs that are not what a build takes
 for bad in "EXTENSION=My-Ext" "VERSION=v1;id" "VERSION=a..b" "REPOSITORY=http://git.example/x" "REPOSITORY=https://git.example/x y" "COMMIT=abc" "RUN=x"; do
