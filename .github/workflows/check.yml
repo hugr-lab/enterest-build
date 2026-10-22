@@ -1,0 +1,35 @@
+# The build repository's own checks: the plan's tests and the workflows' lint.
+name: check
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: the plan
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin" && scripts/yq.sh "$RUNNER_TEMP/bin"
+          PATH="$RUNNER_TEMP/bin:$PATH" tests/plan_test.sh
+      - name: the build tools are pinned by commit
+        run: |
+          refs=$(grep -hoE '(hugr-lab/extension-ci-tools/[^@ ]+@|ci_tools_version: )[^ ]+' .github/workflows/build.yml | sed -E 's/.*[@ ]//')
+          [ -n "$refs" ] || { echo "no pin of the build tools" >&2; exit 1; }
+          for r in $refs; do [[ $r =~ ^[0-9a-f]{40}$ ]] || { echo "not a commit: $r" >&2; exit 1; }; done
+          [ "$(sort -u <<<"$refs" | wc -l)" = 1 ] || { echo "the pins differ: $refs" >&2; exit 1; }
+      - name: actionlint
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSL --retry 3 -o actionlint.tgz https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz
+          echo "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757  actionlint.tgz" | sha256sum -c
+          tar -xzf actionlint.tgz actionlint
+          cd "$GITHUB_WORKSPACE" && "$RUNNER_TEMP/actionlint"
