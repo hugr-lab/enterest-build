@@ -1,0 +1,106 @@
+# Builds one version of an extension for Enterest (Enterest's spec 0003, part 3b-2). Enterest starts
+# it (workflow_dispatch, as its GitHub App) with what a build needs, all public: the version's
+# repository and commit, and its licence keys' public halves. The run is named after Enterest's run,
+# so Enterest finds the run it started.
+#
+# plan checks the inputs and reads the version's description.yml (scripts/plan.sh); build calls the
+# fork's distribution workflow, pinned by commit, once per DuckDB version. Each build is an artifact
+# <extension>-<duckdb tag>-extension-<platform>; the artifact "plan" says which commit each DuckDB
+# version was built from. Enterest reads them, checks each build itself, and deletes the run.
+name: build
+run-name: ${{ inputs.extension }} ${{ inputs.version }} [${{ inputs.run }}]
+
+on:
+  workflow_dispatch:
+    inputs:
+      run:
+        description: Enterest's run id
+        required: true
+      extension:
+        description: the extension's name
+        required: true
+      version:
+        description: the version's tag
+        required: true
+      repository:
+        description: the repository's https git URL
+        required: true
+      commit:
+        description: the commit the version's tag named when Enterest saw it
+        required: true
+      license_keys:
+        description: the licence keys' public halves (PEM), none for a free extension
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+# an extension's runs one at a time: one developer cannot hold every runner
+concurrency:
+  group: build-${{ inputs.extension }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      builds: ${{ steps.plan.outputs.builds }}
+      exclude: ${{ steps.plan.outputs.exclude }}
+      opt_in: ${{ steps.plan.outputs.opt_in }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: yq
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin" && scripts/yq.sh "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >>"$GITHUB_PATH"
+      - id: plan
+        # the inputs reach the script as variables, never as code
+        env:
+          RUN: ${{ inputs.run }}
+          EXTENSION: ${{ inputs.extension }}
+          VERSION: ${{ inputs.version }}
+          REPOSITORY: ${{ inputs.repository }}
+          COMMIT: ${{ inputs.commit }}
+          LICENSE_KEYS: ${{ inputs.license_keys }}
+        run: |
+          scripts/plan.sh "$RUNNER_TEMP/version"
+          mkdir -p "$RUNNER_TEMP/plan"
+          sed -n 's/^builds=//p' "$GITHUB_OUTPUT" >"$RUNNER_TEMP/plan/plan.json"
+          cat "$RUNNER_TEMP/plan/plan.json"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: plan
+          path: ${{ runner.temp }}/plan/plan.json
+          if-no-files-found: error
+
+  build:
+    name: ${{ matrix.build.duckdb }}
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix:
+        build: ${{ fromJSON(needs.plan.outputs.builds) }}
+    uses: hugr-lab/extension-ci-tools/.github/workflows/_extension_distribution.yml@f71e6224a4e59206f48655f0cb24af2c8fa13fee
+    with:
+      ci_tools_version: f71e6224a4e59206f48655f0cb24af2c8fa13fee
+      override_ci_tools_repository: hugr-lab/extension-ci-tools
+      extension_name: ${{ inputs.extension }}
+      override_repository_url: ${{ inputs.repository }}
+      override_ref: ${{ matrix.build.commit }}
+      duckdb_version: ${{ matrix.build.duckdb }}
+      exclude_archs: ${{ needs.plan.outputs.exclude }}
+      opt_in_archs: ${{ needs.plan.outputs.opt_in }}
+      license_keys: ${{ inputs.license_keys }}
+      # the version's tag names the build (its own commit only; a commit per DuckDB version is not it)
+      extension_tag: ${{ matrix.build.commit == inputs.commit && inputs.version || '' }}
+      # every platform, not the reduced set; no cache read or written: a developer's build starts
+      # clean and leaves nothing another reads
+      reduced_ci_mode: disabled
+      restore_cache: false
+      save_cache: false
+      timeout_minutes: 240
