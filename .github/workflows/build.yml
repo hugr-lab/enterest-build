@@ -4,9 +4,11 @@
 # so Enterest finds the run it started.
 #
 # plan checks the inputs and reads the version's description.yml (scripts/plan.sh); build calls the
-# fork's distribution workflow, pinned by commit, once per DuckDB version. Each build is an artifact
-# <extension>-<duckdb tag>-extension-<platform>; the artifact "plan" says which commit each DuckDB
-# version was built from. Enterest reads them, checks each build itself, and deletes the run.
+# fork's distribution workflow, pinned by commit, once per DuckDB version (a release, or a
+# development build: Enterest's spec 0003, part 3b-3). Each build is an artifact
+# <extension>-<ref>-extension-<platform>, the ref DuckDB was built at (a release's tag, a development
+# build's commit); the artifact "plan" says each DuckDB version's name, ref, and the extension's
+# commit built for it. Enterest reads them, checks each build itself, and deletes the run.
 name: build
 run-name: ${{ inputs.extension }} ${{ inputs.version }} [${{ inputs.run }}]
 
@@ -85,14 +87,18 @@ jobs:
       fail-fast: false
       matrix:
         build: ${{ fromJSON(needs.plan.outputs.builds) }}
-    uses: hugr-lab/extension-ci-tools/.github/workflows/_extension_distribution.yml@ad97bddee4c800ebeed981a84e80521796ce0d2a
+    uses: hugr-lab/extension-ci-tools/.github/workflows/_extension_distribution.yml@5f8410642ff3eaac45f9739ccb0183302c6a376b
     with:
-      ci_tools_version: ad97bddee4c800ebeed981a84e80521796ce0d2a
+      ci_tools_version: 5f8410642ff3eaac45f9739ccb0183302c6a376b
       override_ci_tools_repository: hugr-lab/extension-ci-tools
       extension_name: ${{ inputs.extension }}
       override_repository_url: ${{ inputs.repository }}
       override_ref: ${{ matrix.build.commit }}
-      duckdb_version: ${{ matrix.build.duckdb }}
+      duckdb_version: ${{ matrix.build.ref }}
+      # DuckDB checked out at the commit duckdb-versions lists, from DuckDB's own repository: a tag
+      # in the extension's duckdb submodule cannot redirect it
+      duckdb_commit: ${{ matrix.build.duckdb_commit }}
+      override_duckdb_repository: https://github.com/duckdb/duckdb
       exclude_archs: ${{ needs.plan.outputs.exclude }}
       opt_in_archs: ${{ needs.plan.outputs.opt_in }}
       license_keys: ${{ inputs.license_keys }}

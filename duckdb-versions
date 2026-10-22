@@ -1,4 +1,6 @@
-# The DuckDB versions Enterest builds for: a release's tag and its commit, one a line. A version's
+# The DuckDB versions Enterest builds for, one a line: a release's tag and its commit, or a
+# development build of DuckDB's next release as "<source id> <commit> dev" (its commit's first 10 hex
+# digits, as DuckDB and kista name it), removed when the release replaces it. A version's
 # description.yml names those it builds for (extension.duckdb_versions), or its duckdb submodule's
 # commit does; only these are built. A change is a reviewed pull request.
 v2.0.0 d54cbbe3df17e8e5ce68312f483b4155836112aa
