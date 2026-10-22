@@ -39,8 +39,9 @@ All of these are public: Enterest builds public repositories only, and holds no 
 2. **Build** runs hugr-lab's [extension-ci-tools](https://github.com/hugr-lab/extension-ci-tools)
    distribution workflow, pinned by commit, once per DuckDB version. A licensed extension is built
    with the licence keys Enterest gave (`KISTA_LICENSE_KEYS`), whatever its own repository commits.
-   - No cache is read or written: each build starts clean, so no developer's build can leave
-     something another's reads.
+   - No build cache is read or written: each build starts clean, so no developer's build can leave
+     something another's reads. vcpkg's packages come from a binary cache read only (hugr-lab's own
+     CI fills it; the token cannot write), then DuckDB's public one.
    - A build job runs at most four hours, and an extension's runs go one at a time.
    - Each build is an artifact `<extension>-<duckdb tag>-extension-<platform>`.
    - The artifact `plan` names the commit each DuckDB version was built from.

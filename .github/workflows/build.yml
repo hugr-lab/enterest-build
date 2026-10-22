@@ -85,9 +85,9 @@ jobs:
       fail-fast: false
       matrix:
         build: ${{ fromJSON(needs.plan.outputs.builds) }}
-    uses: hugr-lab/extension-ci-tools/.github/workflows/_extension_distribution.yml@f71e6224a4e59206f48655f0cb24af2c8fa13fee
+    uses: hugr-lab/extension-ci-tools/.github/workflows/_extension_distribution.yml@ad97bddee4c800ebeed981a84e80521796ce0d2a
     with:
-      ci_tools_version: f71e6224a4e59206f48655f0cb24af2c8fa13fee
+      ci_tools_version: ad97bddee4c800ebeed981a84e80521796ce0d2a
       override_ci_tools_repository: hugr-lab/extension-ci-tools
       extension_name: ${{ inputs.extension }}
       override_repository_url: ${{ inputs.repository }}
@@ -104,3 +104,12 @@ jobs:
       restore_cache: false
       save_cache: false
       timeout_minutes: 240
+      # vcpkg's binary cache, read only: the cache hugr-lab's own CI fills (its R2 bucket), then
+      # DuckDB's public one. The token is read only at R2 itself (a developer's build can read it,
+      # never write); without the secrets vcpkg builds what it needs.
+      vcpkg_binary_sources: clear;x-aws,s3://duckdb-acl-vcpkg-cache/,read;http,https://vcpkg-cache.duckdb.org,read
+    secrets:
+      VCPKG_CACHING_AWS_ACCESS_KEY_ID: ${{ secrets.VCPKG_CACHING_AWS_ACCESS_KEY_ID }}
+      VCPKG_CACHING_AWS_SECRET_ACCESS_KEY: ${{ secrets.VCPKG_CACHING_AWS_SECRET_ACCESS_KEY }}
+      VCPKG_CACHING_AWS_ENDPOINT_URL: ${{ secrets.VCPKG_CACHING_AWS_ENDPOINT_URL }}
+      VCPKG_CACHING_AWS_DEFAULT_REGION: ${{ secrets.VCPKG_CACHING_AWS_DEFAULT_REGION }}
