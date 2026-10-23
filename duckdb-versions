@@ -4,3 +4,4 @@
 # description.yml names those it builds for (extension.duckdb_versions), or its duckdb submodule's
 # commit does; only these are built. A change is a reviewed pull request.
 v2.0.0 d54cbbe3df17e8e5ce68312f483b4155836112aa
+adc673a42b adc673a42bc051881ab1e302c1904a215e502b5b dev
