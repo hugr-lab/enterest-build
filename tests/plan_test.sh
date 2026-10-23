@@ -67,7 +67,9 @@ want "a comma between platforms" "$out" "exclude=osx_amd64;windows_arm64;wasm_mv
 c=$(describe $'extension:\n  excluded_platforms:\n    - "wasm_mvp"\n    - "osx_amd64"')
 want "excluded platforms as a list (tresor's)" "$(plan "$c")" "exclude=wasm_mvp;osx_amd64;wasm_mvp;wasm_eh;wasm_threads"
 c=$(describe $'extension:\n  duckdb_versions: "v1.4.0"')
-want "no version Enterest builds for" "$(plan "$c")" "error: plan: none of the DuckDB versions v1.4.0 is one Enterest builds for: v2.0.0"
+# the list as duckdb-versions holds it now: a development build added or removed changes it
+listed=$(awk '!/^#/ && NF {print $1}' "$here/duckdb-versions" | paste -sd, -)
+want "no version Enterest builds for" "$(plan "$c")" "error: plan: none of the DuckDB versions v1.4.0 is one Enterest builds for: $listed"
 want "keys: PEM only" "$(plan "$c" $'-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----\n$(id)')" "error: plan: license_keys: PEM public keys only, at most four"
 want "keys: a key left open" "$(plan "$c" $'-----BEGIN PUBLIC KEY-----\nAAAA\n$(id)')" "error: plan: license_keys: PEM public keys only, at most four"
 key=$'-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----\n'
@@ -93,7 +95,7 @@ for line in "${dev:0:9}x $dev dev" "v2.1.0" "v2.1.0 $dev nightly" "x;id $dev" "v
 done
 unset DUCKDB_VERSIONS_FILE
 c=$(describe $'extension:\n  duckdb_versions: "0123456789"')
-want "a development build Enterest does not list" "$(plan "$c")" "error: plan: none of the DuckDB versions 0123456789 is one Enterest builds for: v2.0.0"
+want "a development build Enterest does not list" "$(plan "$c")" "error: plan: none of the DuckDB versions 0123456789 is one Enterest builds for: $listed"
 c=$(describe $'extension:\n  duckdb_versions: 1234567890')
 want "a source id unquoted" "$(plan "$c")" "error: plan: duckdb_versions: names (a source id quoted, as YAML reads digits as a number), or a map of a name to a commit"
 
